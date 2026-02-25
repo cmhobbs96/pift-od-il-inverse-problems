@@ -1,0 +1,68 @@
+{
+  "summary": {
+    "run_id": "e079b77a-7fc2-45d5-b749-d1b1478cdb0e",
+    "config": {
+      "seed": 7,
+      "n_modes": 12,
+      "n_obs": 28,
+      "noise_std": 0.15,
+      "beta": 0.5,
+      "n_steps": 30000,
+      "burn_in": 5000,
+      "thin": 10,
+      "step_size0": 1e-05,
+      "decay": 0.7,
+      "n_quad": 512,
+      "n_grid": 300,
+      "mc_proposal_std": 0.002,
+      "bpinn_sigma_r": 0.05,
+      "bpinn_prior_prec": 0.001,
+      "odil_steps": 8000.0,
+      "odil_lr": 0.002,
+      "odil_phys_weight": 12.0,
+      "runtime_check_interval": 5.0
+    },
+    "source_observations": "synthetic",
+    "device_requested": "cpu",
+    "device_used": "cpu",
+    "n_posterior_samples": 1,
+    "l2_error": 0.7479165506035194,
+    "max_error": 1.1745990694756223,
+    "reference_l2_error": 0.7479256840621424,
+    "reference_max_error": 1.174617400854852,
+    "reference_solver_truth_l2": 1.1173496752256555e-05,
+    "hamiltonian_lag1_autocorr": 0.0,
+    "measurement_interval_coverage_90pct": 0.0,
+    "status": "failed"
+  },
+  "metrics": {
+    "runtime_sec": 0.26694850000785664,
+    "n_total_steps": 8000,
+    "n_effective_steps": 37,
+    "reference_solver_truth_l2": 1.1173496752256555e-05
+  },
+  "diagnostics": {
+    "stability_flags": {
+      "nan_detected": false,
+      "inf_detected": false,
+      "divergence_detected": false,
+      "hamiltonian_overflow": false
+    },
+    "first_bad_step": 37,
+    "max_abs_hamiltonian": 3.5951494446871224e+303,
+    "nan_detected": false,
+    "suggested_actions": [
+      "Reduce odil_lr"
+    ]
+  },
+  "error": {
+    "code": "non_finite",
+    "message": "Non-finite ODIL objective/gradient"
+  },
+  "artifacts": {
+    "field_plot": "/Users/chobbs/Desktop/Personal Projects/pift-od-il-inverse-problems/outputs/runs/e079b77a-7fc2-45d5-b749-d1b1478cdb0e/figures/phase_a_odil_field.png",
+    "trace_plot": "/Users/chobbs/Desktop/Personal Projects/pift-od-il-inverse-problems/outputs/runs/e079b77a-7fc2-45d5-b749-d1b1478cdb0e/figures/phase_a_odil_trace.png",
+    "chain": "/Users/chobbs/Desktop/Personal Projects/pift-od-il-inverse-problems/outputs/runs/e079b77a-7fc2-45d5-b749-d1b1478cdb0e/traces/phase_a_odil_chain.npz",
+    "summary": "/Users/chobbs/Desktop/Personal Projects/pift-od-il-inverse-problems/outputs/runs/e079b77a-7fc2-45d5-b749-d1b1478cdb0e/tables/phase_a_odil_summary.json"
+  }
+}

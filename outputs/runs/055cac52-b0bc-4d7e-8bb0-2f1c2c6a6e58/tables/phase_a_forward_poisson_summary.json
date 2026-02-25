@@ -1,0 +1,74 @@
+{
+  "summary": {
+    "run_id": "055cac52-b0bc-4d7e-8bb0-2f1c2c6a6e58",
+    "config": {
+      "seed": 7,
+      "n_modes": 12,
+      "n_obs": 28,
+      "noise_std": 0.15,
+      "beta": 0.5,
+      "n_steps": 30000,
+      "burn_in": 5000,
+      "thin": 10,
+      "step_size0": 1e-05,
+      "decay": 0.7,
+      "n_quad": 512,
+      "n_grid": 300,
+      "mc_proposal_std": 0.002,
+      "bpinn_sigma_r": 0.05,
+      "bpinn_prior_prec": 0.001,
+      "odil_steps": 8000.0,
+      "odil_lr": 0.002,
+      "odil_phys_weight": 12.0,
+      "runtime_check_interval": 5.0
+    },
+    "source_observations": "synthetic",
+    "device_requested": "cpu",
+    "device_used": "cpu",
+    "n_posterior_samples": 0,
+    "l2_error": NaN,
+    "max_error": NaN,
+    "reference_l2_error": NaN,
+    "reference_max_error": NaN,
+    "reference_solver_truth_l2": 1.1173496752256555e-05,
+    "hamiltonian_lag1_autocorr": 0.0,
+    "measurement_interval_coverage_90pct": NaN,
+    "status": "stopped"
+  },
+  "metrics": {
+    "runtime_sec": 12.396701207995648,
+    "n_total_steps": 30000,
+    "n_effective_steps": 2892,
+    "reference_solver_truth_l2": 1.1173496752256555e-05
+  },
+  "diagnostics": {
+    "stability_flags": {
+      "nan_detected": false,
+      "inf_detected": false,
+      "divergence_detected": false,
+      "hamiltonian_overflow": false
+    },
+    "first_bad_step": null,
+    "max_abs_hamiltonian": 474.31422530395224,
+    "nan_detected": false,
+    "suggested_actions": [
+      "No critical issues detected"
+    ],
+    "sgld_meta": {
+      "stopped": true,
+      "stop_step": 2892,
+      "error_code": null,
+      "error_detail": null
+    }
+  },
+  "error": {
+    "code": "stopped",
+    "message": "Run stopped by user request"
+  },
+  "artifacts": {
+    "field_plot": "/Users/chobbs/Desktop/Personal Projects/pift-od-il-inverse-problems/outputs/runs/055cac52-b0bc-4d7e-8bb0-2f1c2c6a6e58/figures/phase_a_forward_poisson_field.png",
+    "trace_plot": "/Users/chobbs/Desktop/Personal Projects/pift-od-il-inverse-problems/outputs/runs/055cac52-b0bc-4d7e-8bb0-2f1c2c6a6e58/figures/phase_a_forward_poisson_trace.png",
+    "chain": "/Users/chobbs/Desktop/Personal Projects/pift-od-il-inverse-problems/outputs/runs/055cac52-b0bc-4d7e-8bb0-2f1c2c6a6e58/traces/phase_a_forward_poisson_chain.npz",
+    "summary": "/Users/chobbs/Desktop/Personal Projects/pift-od-il-inverse-problems/outputs/runs/055cac52-b0bc-4d7e-8bb0-2f1c2c6a6e58/tables/phase_a_forward_poisson_summary.json"
+  }
+}

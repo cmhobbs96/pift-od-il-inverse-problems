@@ -1,0 +1,12 @@
+seed: 7
+n_modes: 12
+n_obs: 28
+noise_std: 0.08
+beta: 12.0
+n_steps: 16000
+burn_in: 4000
+thin: 8
+step_size0: 0.002
+decay: 0.55
+n_quad: 96
+n_grid: 300
