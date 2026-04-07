@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PIFT Research Workbench</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #ffffff;
+    --bg2: #f8f7f4;
+    --bg3: #f1efe8;
+    --border: rgba(0,0,0,0.12);
+    --border2: rgba(0,0,0,0.22);
+    --text: #1a1a18;
+    --text2: #5f5e5a;
+    --text3: #888780;
+    --blue: #185fa5;
+    --blue-bg: #e6f1fb;
+    --blue-text: #0c447c;
+    --green-bg: #eaf3de;
+    --green-text: #3b6d11;
+    --amber-bg: #faeeda;
+    --amber-text: #854f0b;
+    --red-bg: #fcebeb;
+    --red-text: #a32d2d;
+    --gray-bg: #f1efe8;
+    --gray-text: #5f5e5a;
+    --mono: 'Courier New', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1c;
+      --bg2: #252523;
+      --bg3: #2c2c2a;
+      --border: rgba(255,255,255,0.1);
+      --border2: rgba(255,255,255,0.2);
+      --text: #e8e6de;
+      --text2: #9c9a92;
+      --text3: #6b6a64;
+      --blue: #378add;
+      --blue-bg: #042c53;
+      --blue-text: #85b7eb;
+      --green-bg: #173404;
+      --green-text: #97c459;
+      --amber-bg: #412402;
+      --amber-text: #ef9f27;
+      --red-bg: #501313;
+      --red-text: #f09595;
+      --gray-bg: #2c2c2a;
+      --gray-text: #b4b2a9;
+    }
+  }
+
+  body {
+    font-family: var(--sans);
+    font-size: 13px;
+    background: var(--bg3);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: 40px 1fr;
+    height: calc(100vh - 32px);
+    min-height: 780px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Title bar */
+  .titlebar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 6px;
+    background: var(--bg2);
+    border-bottom: 0.5px solid var(--border);
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .titlebar-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text2);
+    margin-left: 10px;
+  }
+  .titlebar-right {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--bg2);
+    border-right: 0.5px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .section {
+    padding: 10px 12px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .section-title {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  select, input[type=text] {
+    width: 100%;
+    font-size: 12px;
+    padding: 5px 8px;
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+  }
+  select:focus, input[type=text]:focus {
+    border-color: var(--blue);
+  }
+  .method-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 0;
+    font-size: 12px;
+  }
+  .method-row input[type=checkbox] { accent-color: var(--blue); }
+  .badge {
+    font-size: 10px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .badge-ok  { background: var(--green-bg); color: var(--green-text); }
+  .badge-run { background: var(--blue-bg);  color: var(--blue-text); }
+  .badge-warn{ background: var(--amber-bg); color: var(--amber-text); }
+  .badge-fail{ background: var(--red-bg);   color: var(--red-text); }
+  .badge-gray{ background: var(--gray-bg);  color: var(--gray-text); }
+
+  .param-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 12px;
+  }
+  .param-val {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+  }
+
+  .btn {
+    font-size: 12px;
+    padding: 5px 12px;
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    background: transparent;
+    cursor: pointer;
+    color: var(--text);
+    font-family: var(--sans);
+  }
+  .btn:hover { background: var(--bg3); }
+  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-row {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .btn-row .btn:first-child { flex: 1; }
+
+  .progress-wrap { padding: 8px 12px 10px; }
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 4px;
+  }
+  .progress-bar {
+    height: 3px;
+    background: var(--bg3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--blue);
+    border-radius: 2px;
+  }
+
+  /* Main content */
+  .main {
+    display: grid;
+    grid-template-rows: 36px 1fr 200px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Tab bar */
+  .tabbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 0;
+    padding: 0 12px;
+    border-bottom: 0.5px solid var(--border);
+    background: var(--bg2);
+  }
+  .tab {
+    padding: 0 14px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text3);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    user-select: none;
+  }
+  .tab.active {
+    color: var(--text);
+    font-weight: 500;
+    border-bottom-color: var(--blue);
+  }
+  .tab:hover:not(.active) { color: var(--text2); }
+
+  /* Plot grid */
+  .plot-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  .plot-cell {
+    background: var(--bg);
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden;
+  }
+  .plot-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text2);
+  }
+  .plot-subtitle {
+    font-size: 10px;
+    color: var(--text3);
+    margin-bottom: 2px;
+  }
+  svg.chart { width: 100%; flex: 1; min-height: 0; }
+
+  /* Bottom strip */
+  .bottom-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border-top: 0.5px solid var(--border);
+  }
+  .bottom-cell {
+    background: var(--bg2);
+    padding: 10px 14px;
+    overflow: hidden;
+  }
+  .bottom-title {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+
+  /* Metric cards */
+  .metric-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .metric {
+    background: var(--bg3);
+    border-radius: var(--radius);
+    padding: 7px 10px;
+  }
+  .metric-label {
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 2px;
+  }
+  .metric-val {
+    font-size: 17px;
+    font-weight: 500;
+  }
+  .good { color: var(--green-text); }
+  .warn { color: var(--amber-text); }
+  .bad  { color: var(--red-text); }
+
+  /* Diag rows */
+  .diag-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .diag-row:last-child { border-bottom: none; }
+  .pill {
+    font-size: 10px;
+    padding: 1px 7px;
+    border-radius: 10px;
+  }
+  .pill-ok   { background: var(--green-bg); color: var(--green-text); }
+  .pill-warn { background: var(--amber-bg); color: var(--amber-text); }
+  .pill-fail { background: var(--red-bg);   color: var(--red-text); }
+
+  /* Run history */
+  .run-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .run-row:last-child { border-bottom: none; }
+  .run-id {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .run-method { color: var(--text2); font-size: 11px; }
+
+  /* SVG helpers */
+  .axis-line { stroke: var(--border2); stroke-width: 0.5; }
+  .axis-text { font-size: 8px; fill: var(--text3); font-family: var(--sans); }
+  .legend-text { font-size: 8.5px; fill: var(--text2); font-family: var(--sans); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Title bar -->
+  <div class="titlebar">
+    <div class="dot" style="background:#e24b4a"></div>
+    <div class="dot" style="background:#ef9f27"></div>
+    <div class="dot" style="background:#639922"></div>
+    <span class="titlebar-name">PIFT Research Workbench</span>
+    <span class="titlebar-right">Conner Hobbs &nbsp;·&nbsp; ME 697</span>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="section">
+      <div class="section-title">Example</div>
+      <select>
+        <option selected>Forward 1D Poisson</option>
+        <option>β sensitivity sweep (Ex. 1)</option>
+        <option>Model-form uncertainty (Ex. 2)</option>
+        <option>Inverse: D and κ (Ex. 3a)</option>
+        <option>Inverse: D, κ and f (Ex. 3b)</option>
+        <option>2D Allen-Cahn bimodal (Ex. 4)</option>
+        <option>2D forward Poisson</option>
+        <option>Time-dependent heat</option>
+      </select>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Methods</div>
+      <div class="method-row">
+        <input type="checkbox" checked>
+        <span>PIFT (SGLD)</span>
+        <span class="badge badge-ok">ok</span>
+      </div>
+      <div class="method-row">
+        <input type="checkbox" checked>
+        <span>Monte Carlo</span>
+        <span class="badge badge-ok">ok</span>
+      </div>
+      <div class="method-row">
+        <input type="checkbox">
+        <span>ODIL (Newton)</span>
+        <span class="badge badge-run">ready</span>
+      </div>
+      <div class="method-row">
+        <input type="checkbox">
+        <span>ODIL warm-start PIFT</span>
+        <span class="badge badge-run">ready</span>
+      </div>
+      <div class="method-row">
+        <input type="checkbox">
+        <span>Bayesian PINNs</span>
+        <span class="badge badge-warn">unstable</span>
+      </div>
+      <div class="method-row">
+        <input type="checkbox" disabled>
+        <span style="color:var(--text3)">HMCECS</span>
+        <span class="badge badge-gray">ex. 4 only</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Sampler config</div>
+      <div class="param-row"><span>β</span><span class="param-val">0.5</span></div>
+      <div class="param-row"><span>n_steps</span><span class="param-val">40 000</span></div>
+      <div class="param-row"><span>burn_in</span><span class="param-val">8 000</span></div>
+      <div class="param-row"><span>thin</span><span class="param-val">16</span></div>
+      <div class="param-row"><span>step_size₀</span><span class="param-val">2e-3</span></div>
+      <div class="param-row"><span>decay α₁</span><span class="param-val">0.55</span></div>
+      <div class="param-row"><span>max_cond_no</span><span class="param-val">100</span></div>
+      <div class="param-row"><span>n_quad</span><span class="param-val">96</span></div>
+      <div class="param-row"><span>n_modes</span><span class="param-val">12</span></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Data source</div>
+      <div style="display:flex;gap:4px;margin-bottom:6px">
+        <button class="btn btn-primary" style="flex:1;font-size:11px;padding:4px 0">Synthetic</button>
+        <button class="btn" style="font-size:11px;padding:4px 8px">CSV</button>
+        <button class="btn" style="font-size:11px;padding:4px 8px">Seed</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3)">28 observations · σ = 0.08 · seed 7</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Compute device</div>
+      <div style="display:flex;gap:14px;font-size:12px">
+        <label style="display:flex;align-items:center;gap:5px">
+          <input type="radio" name="dev" checked style="accent-color:var(--blue)"> CPU
+        </label>
+        <label style="display:flex;align-items:center;gap:5px">
+          <input type="radio" name="dev" style="accent-color:var(--blue)"> GPU
+        </label>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary">Run</button>
+      <button class="btn">Stop</button>
+      <button class="btn">Reset</button>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-label">
+        <span>Completed</span>
+        <span>100% · 02:41</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:100%"></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">
+        PIFT completed · MC completed
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Main area -->
+  <div class="main">
+
+    <!-- Tab bar -->
+    <div class="tabbar">
+      <div class="tab active">Plots</div>
+      <div class="tab">Diagnostics</div>
+      <div class="tab">Runs</div>
+      <div class="tab">Benchmark</div>
+      <div class="tab">Compare</div>
+      <div class="tab">Export</div>
+    </div>
+
+    <!-- Plot grid (2×2) -->
+    <div class="plot-grid">
+
+      <!-- Plot 1: Posterior overlay -->
+      <div class="plot-cell">
+        <div class="plot-title">Posterior field overlay</div>
+        <div class="plot-subtitle">PIFT (SGLD) vs Monte Carlo · 5–95% bands</div>
+        <svg class="chart" viewBox="0 0 340 140">
+          <line x1="30" y1="8" x2="30" y2="122" class="axis-line"/>
+          <line x1="30" y1="122" x2="330" y2="122" class="axis-line"/>
+          <text x="30" y="131" class="axis-text" text-anchor="middle">0</text>
+          <text x="330" y="131" class="axis-text" text-anchor="middle">1.0</text>
+          <text x="14" y="11" class="axis-text" text-anchor="middle">1.2</text>
+          <text x="14" y="65" class="axis-text" text-anchor="middle">0.6</text>
+          <text x="14" y="122" class="axis-text" text-anchor="middle">0</text>
+          <!-- Ground truth dashed -->
+          <path d="M30,122 C60,112 95,72 140,22 C160,10 180,10 200,20 C245,45 280,95 330,120"
+                fill="none" stroke="#888780" stroke-width="1.5" stroke-dasharray="5 3"/>
+          <!-- PIFT band -->
+          <path d="M30,122 C60,108 97,68 142,18 C162,6 182,6 202,16 C248,41 283,92 330,118
+                   L330,124 C283,100 248,49 202,24 C182,14 162,14 142,26 C97,76 60,116 30,126 Z"
+                fill="#e6f1fb" opacity="0.6"/>
+          <!-- PIFT mean -->
+          <path d="M30,122 C60,110 97,70 142,20 C162,8 182,8 202,18 C248,43 283,93 330,120"
+                fill="none" stroke="#185fa5" stroke-width="1.8"/>
+          <!-- MC band -->
+          <path d="M30,122 C62,106 99,66 144,16 C164,4 184,4 204,14 C250,39 285,90 330,116
+                   L330,126 C285,102 250,51 204,26 C184,16 164,16 144,28 C99,78 62,118 30,128 Z"
+                fill="#faeeda" opacity="0.5"/>
+          <!-- MC mean -->
+          <path d="M30,122 C62,108 99,68 144,18 C164,6 184,6 204,16 C250,41 285,92 330,120"
+                fill="none" stroke="#ba7517" stroke-width="1.8"/>
+          <!-- Observations -->
+          <circle cx="55" cy="107" r="2.5" fill="#e24b4a"/>
+          <circle cx="80" cy="88" r="2.5" fill="#e24b4a"/>
+          <circle cx="105" cy="64" r="2.5" fill="#e24b4a"/>
+          <circle cx="135" cy="32" r="2.5" fill="#e24b4a"/>
+          <circle cx="160" cy="15" r="2.5" fill="#e24b4a"/>
+          <circle cx="185" cy="12" r="2.5" fill="#e24b4a"/>
+          <circle cx="210" cy="22" r="2.5" fill="#e24b4a"/>
+          <circle cx="240" cy="46" r="2.5" fill="#e24b4a"/>
+          <circle cx="270" cy="76" r="2.5" fill="#e24b4a"/>
+          <circle cx="300" cy="102" r="2.5" fill="#e24b4a"/>
+          <!-- Legend -->
+          <rect x="185" y="52" width="142" height="56" fill="var(--bg)" stroke="var(--border)" stroke-width="0.5" rx="4"/>
+          <line x1="191" y1="63" x2="206" y2="63" stroke="#888780" stroke-width="1.5" stroke-dasharray="3 2"/>
+          <text x="210" y="66" class="legend-text">ground truth</text>
+          <line x1="191" y1="74" x2="206" y2="74" stroke="#185fa5" stroke-width="1.8"/>
+          <text x="210" y="77" class="legend-text">PIFT mean</text>
+          <line x1="191" y1="85" x2="206" y2="85" stroke="#ba7517" stroke-width="1.8"/>
+          <text x="210" y="88" class="legend-text">MC mean</text>
+          <circle cx="196" cy="97" r="2.5" fill="#e24b4a"/>
+          <text x="210" y="100" class="legend-text">observations</text>
+        </svg>
+      </div>
+
+      <!-- Plot 2: Hamiltonian trace -->
+      <div class="plot-cell">
+        <div class="plot-title">Hamiltonian trace — PIFT SGLD</div>
+        <div class="plot-subtitle">Burn-in: 8 000 steps · mixing diagnostics</div>
+        <svg class="chart" viewBox="0 0 340 140">
+          <line x1="30" y1="8" x2="30" y2="122" class="axis-line"/>
+          <line x1="30" y1="122" x2="330" y2="122" class="axis-line"/>
+          <!-- Burn-in shading -->
+          <rect x="30" y="8" width="65" height="114" fill="var(--bg3)" opacity="0.6"/>
+          <line x1="95" y1="8" x2="95" y2="122" stroke="#e24b4a" stroke-width="0.8" stroke-dasharray="3 2"/>
+          <text x="95" y="18" class="axis-text" text-anchor="middle" fill="#e24b4a">burn-in</text>
+          <!-- Noisy trace -->
+          <polyline points="30,80 35,95 40,60 45,105 50,50 55,88 60,42 65,98 70,55 75,85 80,52 85,78 90,48 95,72
+                            100,55 105,68 110,52 115,63 120,56 125,61 130,53 135,59 140,54 145,58 150,53 155,57
+                            160,52 165,56 170,51 175,55 180,50 185,54 190,49 195,53 200,49 205,52 210,48 215,51
+                            220,48 225,51 230,47 235,50 240,47 245,50 250,46 255,49 260,46 265,49 270,46 275,48
+                            280,45 285,48 290,45 295,47 300,44 305,47 310,44 315,46 320,44 325,46 330,44"
+                fill="none" stroke="#185fa5" stroke-width="0.9" opacity="0.7"/>
+          <!-- Running mean -->
+          <path d="M95,72 C120,66 150,58 200,51 C250,47 290,45 330,44"
+                fill="none" stroke="#185fa5" stroke-width="2"/>
+          <text x="32" y="131" class="axis-text">0</text>
+          <text x="95" y="131" class="axis-text" text-anchor="middle">8k</text>
+          <text x="210" y="131" class="axis-text" text-anchor="middle">24k</text>
+          <text x="330" y="131" class="axis-text" text-anchor="middle">40k</text>
+          <text x="8" y="50" class="axis-text" text-anchor="middle">H</text>
+          <rect x="220" y="55" width="108" height="36" fill="var(--bg)" stroke="var(--border)" stroke-width="0.5" rx="4"/>
+          <text x="228" y="67" class="legend-text">lag-1 autocorr: 0.41</text>
+          <text x="228" y="79" class="legend-text">ESS ≈ 1 180 / 2 000</text>
+        </svg>
+      </div>
+
+      <!-- Plot 3: Preconditioner weights -->
+      <div class="plot-cell">
+        <div class="plot-title">Preconditioner mode weights</div>
+        <div class="plot-subtitle">Normalized 1/(kπ)⁴ · condition number = 100</div>
+        <svg class="chart" viewBox="0 0 340 140">
+          <line x1="30" y1="8" x2="30" y2="118" class="axis-line"/>
+          <line x1="30" y1="118" x2="330" y2="118" class="axis-line"/>
+          <text x="14" y="12" class="axis-text" text-anchor="middle">1.0</text>
+          <text x="14" y="68" class="axis-text" text-anchor="middle">0.5</text>
+          <text x="14" y="120" class="axis-text" text-anchor="middle">0</text>
+          <!-- Bars for 12 modes -->
+          <rect x="36"  y="18"  width="18" height="100" fill="#185fa5" opacity="0.85"/>
+          <rect x="62"  y="106" width="18" height="12"  fill="#185fa5" opacity="0.7"/>
+          <rect x="88"  y="113" width="18" height="5"   fill="#185fa5" opacity="0.6"/>
+          <rect x="114" y="115" width="18" height="3"   fill="#185fa5" opacity="0.5"/>
+          <rect x="140" y="116" width="18" height="2"   fill="#185fa5" opacity="0.45"/>
+          <rect x="166" y="116" width="18" height="2"   fill="#185fa5" opacity="0.4"/>
+          <rect x="192" y="116" width="18" height="2"   fill="#185fa5" opacity="0.35"/>
+          <rect x="218" y="117" width="18" height="1.5" fill="#185fa5" opacity="0.3"/>
+          <rect x="244" y="117" width="18" height="1.5" fill="#185fa5" opacity="0.28"/>
+          <rect x="270" y="117" width="18" height="1.5" fill="#185fa5" opacity="0.25"/>
+          <rect x="296" y="117" width="18" height="1.5" fill="#185fa5" opacity="0.22"/>
+          <!-- Clipping line -->
+          <line x1="30" y1="107" x2="330" y2="107" stroke="#e24b4a" stroke-width="0.8" stroke-dasharray="4 3"/>
+          <text x="335" y="110" class="axis-text" fill="#e24b4a">floor</text>
+          <!-- x-axis labels -->
+          <text x="45"  y="128" class="axis-text" text-anchor="middle">1</text>
+          <text x="97"  y="128" class="axis-text" text-anchor="middle">3</text>
+          <text x="149" y="128" class="axis-text" text-anchor="middle">5</text>
+          <text x="201" y="128" class="axis-text" text-anchor="middle">7</text>
+          <text x="253" y="128" class="axis-text" text-anchor="middle">9</text>
+          <text x="305" y="128" class="axis-text" text-anchor="middle">11</text>
+          <text x="180" y="138" class="axis-text" text-anchor="middle">mode k</text>
+        </svg>
+      </div>
+
+      <!-- Plot 4: Coverage / credible interval -->
+      <div class="plot-cell">
+        <div class="plot-title">Credible interval calibration</div>
+        <div class="plot-subtitle">Empirical vs nominal coverage · 28 observation points</div>
+        <svg class="chart" viewBox="0 0 340 140">
+          <line x1="30" y1="8" x2="30" y2="118" class="axis-line"/>
+          <line x1="30" y1="118" x2="310" y2="118" class="axis-line"/>
+          <!-- Perfect calibration diagonal -->
+          <line x1="30" y1="118" x2="310" y2="8" stroke="var(--text3)" stroke-width="1" stroke-dasharray="4 3"/>
+          <!-- PIFT calibration curve (slightly above diagonal = conservative) -->
+          <path d="M30,118 C80,100 130,65 180,34 C220,15 260,9 310,8"
+                fill="none" stroke="#185fa5" stroke-width="2"/>
+          <!-- MC calibration curve (below diagonal = slightly overconfident) -->
+          <path d="M30,118 C75,106 125,75 175,48 C215,28 260,16 310,10"
+                fill="none" stroke="#ba7517" stroke-width="2"/>
+          <!-- Axis labels -->
+          <text x="14" y="12" class="axis-text" text-anchor="middle">100%</text>
+          <text x="14" y="68" class="axis-text" text-anchor="middle">50%</text>
+          <text x="14" y="120" class="axis-text" text-anchor="middle">0%</text>
+          <text x="30"  y="129" class="axis-text" text-anchor="middle">0%</text>
+          <text x="170" y="129" class="axis-text" text-anchor="middle">50%</text>
+          <text x="310" y="129" class="axis-text" text-anchor="middle">100%</text>
+          <text x="170" y="138" class="axis-text" text-anchor="middle">nominal coverage</text>
+          <!-- Legend -->
+          <rect x="40" y="12" width="120" height="36" fill="var(--bg)" stroke="var(--border)" stroke-width="0.5" rx="4"/>
+          <line x1="47" y1="23" x2="62" y2="23" stroke="#185fa5" stroke-width="2"/>
+          <text x="66" y="26" class="legend-text">PIFT (100% @ 95%)</text>
+          <line x1="47" y1="37" x2="62" y2="37" stroke="#ba7517" stroke-width="2"/>
+          <text x="66" y="40" class="legend-text">MC (71% @ 95%)</text>
+        </svg>
+      </div>
+
+    </div>
+
+    <!-- Bottom strip -->
+    <div class="bottom-strip">
+
+      <!-- Metrics -->
+      <div class="bottom-cell">
+        <div class="bottom-title">Posterior metrics</div>
+        <div class="metric-row">
+          <div class="metric">
+            <div class="metric-label">L2 error</div>
+            <div class="metric-val good">0.027</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Max error</div>
+            <div class="metric-val good">0.041</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Coverage</div>
+            <div class="metric-val good">100%</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Samples</div>
+            <div class="metric-val" style="font-size:16px">2 000</div>
+          </div>
+        </div>
+        <div style="margin-top:8px">
+          <div class="diag-row">
+            <span>NaN detected</span>
+            <span class="pill pill-ok">false</span>
+          </div>
+          <div class="diag-row">
+            <span>Divergence</span>
+            <span class="pill pill-ok">false</span>
+          </div>
+          <div class="diag-row">
+            <span>max |H|</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">1.77 × 10¹¹</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Energy diagnostics -->
+      <div class="bottom-cell">
+        <div class="bottom-title">Energy diagnostics</div>
+        <div class="diag-row">
+          <span>β</span>
+          <span class="param-val">0.5</span>
+        </div>
+        <div class="diag-row">
+          <span>initial U</span>
+          <span class="param-val">8.8 × 10⁻⁹</span>
+        </div>
+        <div class="diag-row">
+          <span>initial Ω</span>
+          <span class="param-val">13.12</span>
+        </div>
+        <div class="diag-row">
+          <span>β·U / Ω</span>
+          <span class="param-val">3.4 × 10⁻¹⁰</span>
+        </div>
+        <div class="diag-row">
+          <span>Condition no. (raw)</span>
+          <span class="param-val">20 736</span>
+        </div>
+        <div class="diag-row">
+          <span>Condition no. (clipped)</span>
+          <span class="param-val" style="color:var(--green-text)">100</span>
+        </div>
+      </div>
+
+      <!-- Run history -->
+      <div class="bottom-cell">
+        <div class="bottom-title">Run history</div>
+        <div class="run-row">
+          <span class="badge badge-ok" style="min-width:52px;text-align:center">done</span>
+          <span class="run-method">PIFT</span>
+          <span class="run-id">04b9e791</span>
+          <span style="font-size:10px;color:var(--text3)">2:41</span>
+        </div>
+        <div class="run-row">
+          <span class="badge badge-ok" style="min-width:52px;text-align:center">done</span>
+          <span class="run-method">MC</span>
+          <span class="run-id">f959f124</span>
+          <span style="font-size:10px;color:var(--text3)">0:01</span>
+        </div>
+        <div class="run-row">
+          <span class="badge badge-fail" style="min-width:52px;text-align:center">failed</span>
+          <span class="run-method">ODIL</span>
+          <span class="run-id">87fd1a2e</span>
+          <span style="font-size:10px;color:var(--text3)">0:00</span>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:6px">
+          <button class="btn" style="flex:1;font-size:11px;padding:4px 0">Pin baseline</button>
+          <button class="btn" style="flex:1;font-size:11px;padding:4px 0">Compare ↗</button>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

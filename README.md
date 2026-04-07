@@ -7,6 +7,30 @@ Global code lives directly under `src/` (`core/`, `models/`, `pipelines/`, `util
 Frontend:
 - Active GUI: `frontend/app.py` (PySide6)
 
+## Compute backends
+
+This project supports three compute backends, selectable via the `compute` block in any [configs/](configs/) YAML or via the GUI sidebar:
+
+| Backend | Device | Install | When to use |
+|---|---|---|---|
+| `local` | CPU | `pip install -e .` | Default. Works everywhere. |
+| `local` | GPU (CUDA) | `pip install -e ".[gpu]"` | Linux/Windows with NVIDIA GPU. |
+| `local` | GPU (Metal) | `pip install -e ".[gpu-metal]"` | macOS with Apple silicon. |
+| `modal` | Remote A10G | `pip install -e ".[modal]"` then `modal token new` | No local GPU; want serverless on-demand GPU. |
+| Colab | Free T4 | Click the badge below | Zero setup. Session-bound (~90 min). |
+
+**Open the Phase A workbench in Colab:** [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/cmhobbs96/pift-od-il-inverse-problems/blob/main/examples/01_phase_a_workbench.ipynb)
+
+Set the backend per-run by editing the `compute` block in your config:
+```yaml
+compute:
+  backend: local      # local | modal
+  device: auto        # auto | cpu | gpu  (used when backend=local)
+```
+or via the env vars `PIFT_FORCE_BACKEND` / `PIFT_FORCE_DEVICE` (used by the Colab bootstrap to force `local + gpu` regardless of YAML).
+
+---
+
 ## 1. Repository
 **Repo name:** `pift-od-il-inverse-problems`  
 **Description:** Reproducible implementation of Physics-Informed Information Field Theory (PIFT) for uncertainty-aware field inference from sparse/noisy measurements, with an optional ODIL-style inverse-problems baseline and comparisons on accuracy, cost, and uncertainty calibration.
