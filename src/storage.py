@@ -95,6 +95,14 @@ class RunStorage:
                 """
             )
             conn.commit()
+            # Migration: add example_key column if it doesn't exist yet.
+            try:
+                conn.execute(
+                    "ALTER TABLE runs ADD COLUMN example_key TEXT DEFAULT 'phase_a_forward'"
+                )
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
     def insert_run(self, record: dict[str, Any], config: dict[str, Any]) -> None:
         conn = self._conn()
@@ -102,8 +110,8 @@ class RunStorage:
             conn.execute(
                 """
                 INSERT INTO runs(run_id, created_at, updated_at, method, status, device_requested, device_used,
-                                 config_hash, runtime_sec, error_code, error_message)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 config_hash, runtime_sec, error_code, error_message, example_key)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record["run_id"],
@@ -117,6 +125,7 @@ class RunStorage:
                     record.get("runtime_sec"),
                     record.get("error_code"),
                     record.get("error_message"),
+                    record.get("example_key", "phase_a_forward"),
                 ),
             )
             conn.execute(
@@ -271,6 +280,30 @@ class RunStorage:
         run_dict["artifacts"] = {r["artifact_type"]: r["path"] for r in art_rows}
         run_dict["events"] = [dict(r) for r in evt_rows]
         return run_dict
+
+    def delete_run(self, run_id: str, *, delete_artifacts: bool = True) -> bool:
+        conn = self._conn()
+        with self._lock:
+            row = conn.execute("SELECT 1 FROM runs WHERE run_id=?", (run_id,)).fetchone()
+            if row is None:
+                return False
+
+            if delete_artifacts:
+                art_rows = conn.execute(
+                    "SELECT path FROM run_artifacts WHERE run_id=?", (run_id,)
+                ).fetchall()
+                for r in art_rows:
+                    p = Path(str(r["path"]))
+                    if p.exists() and p.is_file():
+                        p.unlink(missing_ok=True)
+
+            conn.execute("DELETE FROM run_events WHERE run_id=?", (run_id,))
+            conn.execute("DELETE FROM run_artifacts WHERE run_id=?", (run_id,))
+            conn.execute("DELETE FROM run_metrics WHERE run_id=?", (run_id,))
+            conn.execute("DELETE FROM run_configs WHERE run_id=?", (run_id,))
+            conn.execute("DELETE FROM runs WHERE run_id=?", (run_id,))
+            conn.commit()
+        return True
 
     def __del__(self) -> None:
         try:
