@@ -1,0 +1,18 @@
+seed: 42
+K: 20
+D: 0.25
+bc_left: 1.0
+bc_right: 0.1
+beta_values: [1, 10, 100, 1000]
+n_steps: 50000
+burn_in: 10000
+thin: 20
+step_size0: 0.1
+decay: 0.51
+n_quad: 128
+n_grid: 300
+max_condition_number: 100.0
+runtime_check_interval: 5
+compute:
+  backend: local      # local | modal
+  device: auto        # auto | cpu | gpu  (only used when backend=local)

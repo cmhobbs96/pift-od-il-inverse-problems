@@ -1,0 +1,19 @@
+seed: 42
+epsilon: 0.01
+beta: 100.0
+max_freq: 1
+n_obs_per_boundary: 15
+noise_std: 0.01
+observed_boundaries: [left, right, bottom]
+n_quad_per_dim: 40
+num_warmup: 500
+num_samples: 1000
+num_chains: 1
+target_accept_prob: 0.8
+max_tree_depth: 10
+prior_std: 10.0
+n_gmm_components: 2
+n_grid_per_dim: 50
+compute:
+  backend: local      # local | modal
+  device: auto        # auto | cpu | gpu  (only used when backend=local)

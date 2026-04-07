@@ -1,0 +1,28 @@
+seed: 42
+K: 20
+D_true: 0.1
+kappa_true: 1.0
+beta: 1.0e5
+n_obs: 40
+noise_std: 0.01
+kle_lengthscale: 0.3
+kle_n_terms: 10
+kle_n_grid: 200
+lambda0_log_D: 0.0
+lambda0_log_kappa: 0.5
+warmup_steps: 50000
+outer_steps: 10000
+outer_step_size0: 0.1
+outer_decay: 0.51
+inner_T_prior: 10
+inner_T_posterior: 1
+inner_step_size0: 0.1
+inner_decay: 0.51
+n_quad: 128
+n_grid: 300
+max_condition_number: 100.0
+burn_in_frac: 0.2
+snapshot_interval: 100
+compute:
+  backend: local      # local | modal
+  device: auto        # auto | cpu | gpu  (only used when backend=local)
