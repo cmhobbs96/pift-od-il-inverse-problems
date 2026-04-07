@@ -10,3 +10,6 @@ step_size0: 0.002
 decay: 0.55
 n_quad: 96
 n_grid: 300
+compute:
+  backend: local      # local | modal
+  device: auto        # auto | cpu | gpu  (only used when backend=local)

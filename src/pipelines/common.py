@@ -37,16 +37,27 @@ def load_observations_csv(csv_path: str | Path) -> tuple[np.ndarray, np.ndarray]
 
 def select_device(preference: str):
     pref = preference.lower().strip()
-    if pref not in {"cpu", "gpu"}:
+    if pref not in {"cpu", "gpu", "auto"}:
         pref = "cpu"
 
-    if pref == "gpu":
-        try:
-            gpus = jax.devices("gpu")
-        except Exception:  # noqa: BLE001
-            gpus = []
-        if gpus:
-            return gpus[0], "gpu"
+    def _try_gpu():
+        for backend in ("gpu", "METAL"):
+            try:
+                devs = jax.devices(backend)
+            except Exception:  # noqa: BLE001
+                devs = []
+            if devs:
+                label = "gpu" if backend == "gpu" else "metal"
+                return devs[0], label
+        return None
+
+    if pref in {"gpu", "auto"}:
+        found = _try_gpu()
+        if found is not None:
+            return found
+        if pref == "gpu":
+            # Explicit gpu request but none found — fall back to CPU.
+            pass
 
     cpus = jax.devices("cpu")
     return cpus[0], "cpu"

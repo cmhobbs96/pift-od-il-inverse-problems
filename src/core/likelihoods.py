@@ -24,4 +24,4 @@ def gaussian_nll(theta, obs_matrix, y_obs, noise_std: float):
 
     nll, grad = jax.value_and_grad(_nll)(theta)
     pred = obs_matrix @ theta
-    return float(nll), grad, pred
+    return nll, grad, pred

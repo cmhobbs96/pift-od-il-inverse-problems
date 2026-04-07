@@ -33,10 +33,10 @@ DEFAULT_PHASE_A_CONFIG: dict[str, float | int] = {
     "n_modes": 12,
     "n_obs": 28,
     "noise_std": 0.08,
-    "beta": 12.0,
-    "n_steps": 16000,
-    "burn_in": 4000,
-    "thin": 8,
+    "beta": 0.5,
+    "n_steps": 40000,
+    "burn_in": 8000,
+    "thin": 16,
     "step_size0": 2e-3,
     "decay": 0.55,
     "n_quad": 96,
@@ -45,9 +45,10 @@ DEFAULT_PHASE_A_CONFIG: dict[str, float | int] = {
     "bpinn_sigma_r": 0.05,
     "bpinn_prior_prec": 1e-3,
     "odil_steps": 8000,
-    "odil_lr": 2e-3,
+    "odil_lr": 1e-7,
     "odil_phys_weight": 12.0,
     "runtime_check_interval": 5,
+    "max_condition_number": 100.0,
 }
 
 def run_phase_a_forward_poisson(
@@ -66,6 +67,8 @@ def run_phase_a_forward_poisson(
     config = dict(DEFAULT_PHASE_A_CONFIG)
     if cfg:
         config.update(cfg)
+
+    print(f"[phase_a] PIFT runtime config: n_steps={config['n_steps']} beta={config['beta']} step_size0={config['step_size0']} max_condition_number={config.get('max_condition_number')}")
 
     emit(progress_callback, started_at, 2.0, "setup", "Initializing run configuration")
     emit(progress_callback, started_at, 4.0, "setup", "Validating hyperparameters")
@@ -96,9 +99,12 @@ def run_phase_a_forward_poisson(
         emit(progress_callback, started_at, 16.0, "data", "Constructed observation operator matrix")
         emit(progress_callback, started_at, 18.0, "model", "Building physics and likelihood terms")
 
-        def grad_and_metrics(theta):
+        def grad_and_metrics(theta, sub_key=None):
             nonlocal key
-            key, quad_key = jax.random.split(key)
+            if sub_key is None:
+                key, quad_key = jax.random.split(key)
+            else:
+                quad_key = sub_key
             x_quad = jax.random.uniform(
                 quad_key,
                 shape=(int(config["n_quad"]),),
@@ -117,6 +123,21 @@ def run_phase_a_forward_poisson(
             return grad, metrics
 
         emit(progress_callback, started_at, 20.0, "sampler", "Initializing SGLD state")
+
+        # Project the FD reference solution onto the sine basis so the chain
+        # starts near the physics solution rather than at zero.
+        x_fd, phi_fd = solve_poisson_dirichlet_fd(
+            forcing_fn=lambda z: np.asarray(forcing(jnp.asarray(z)), dtype=float),
+            n_points=500, domain=(0.0, 1.0), bc=(0.0, 0.0),
+        )
+        B_init = field.design_matrix(jnp.asarray(x_fd))
+        theta0 = jnp.asarray(
+            np.linalg.lstsq(np.asarray(B_init), np.asarray(phi_fd), rcond=None)[0]
+        )
+        _init_grad, _init_metrics = grad_and_metrics(theta0)
+        initial_physics_energy = float(_init_metrics["physics"])
+        initial_likelihood_energy = float(_init_metrics["likelihood"])
+
         emit(progress_callback, started_at, 22.0, "sampler", f"Running SGLD sampler ({int(config['n_steps'])} steps)")
 
         guard = RuntimeGuard(RuntimeGuardConfig())
@@ -128,7 +149,9 @@ def run_phase_a_forward_poisson(
         def _runtime_check(step: int, theta_np: np.ndarray, grad_np: np.ndarray, metrics: dict[str, float]):
             return guard.check(step, theta_np, grad_np, metrics)
 
-        theta0 = jnp.zeros((int(config["n_modes"]),), dtype=jnp.float64)
+        precond = field.preconditioner(beta=float(config["beta"]))
+        _max_cond = float(config.get("max_condition_number", 100.0))
+
         key, sgld_key = jax.random.split(key)
         chain, traces, sgld_meta = sgld_sample(
             theta0=theta0,
@@ -142,6 +165,8 @@ def run_phase_a_forward_poisson(
             stop_signal=stop_signal,
             runtime_check=_runtime_check,
             runtime_check_interval=int(config.get("runtime_check_interval", 5)),
+            preconditioner=precond,
+            max_condition_number=_max_cond,
         )
 
         if sgld_meta.get("error_code") is not None:
@@ -201,6 +226,8 @@ def run_phase_a_forward_poisson(
 
     diagnostics = guard.diagnostics_payload()
     diagnostics["sgld_meta"] = sgld_meta
+    diagnostics["initial_physics_energy"] = initial_physics_energy
+    diagnostics["initial_likelihood_energy"] = initial_likelihood_energy
 
     l2_error = float(np.sqrt(np.mean((phi_mean - phi_truth) ** 2))) if np.isfinite(phi_mean).all() else float("nan")
     max_error = float(np.max(np.abs(phi_mean - phi_truth))) if np.isfinite(phi_mean).all() else float("nan")
@@ -314,6 +341,8 @@ def run_phase_a_forward_poisson(
         "x_obs": x_obs_np,
         "y_obs": y_obs_np,
         "traces": traces,
+        "samples": samples,
+        "chain": effective_chain,
         "output_paths": artifacts,
     }
 
@@ -391,8 +420,16 @@ def run_phase_a_monte_carlo(
         like_trace = np.zeros(n_steps, dtype=float)
         phys_trace = np.zeros(n_steps, dtype=float)
 
-        theta = np.zeros(dim, dtype=float)
+        # Initialize at the FD solution projected onto the sine basis.
+        x_fd, phi_fd = solve_poisson_dirichlet_fd(
+            forcing_fn=lambda z: np.asarray(forcing(jnp.asarray(z)), dtype=float),
+            n_points=500, domain=(0.0, 1.0), bc=(0.0, 0.0),
+        )
+        B_init = np.asarray(field.design_matrix(jnp.asarray(x_fd)))
+        theta = np.linalg.lstsq(B_init, np.asarray(phi_fd), rcond=None)[0]
         curr_h, curr_like, curr_phys = _energy(theta)
+        initial_physics_energy = float(curr_phys)
+        initial_likelihood_energy = float(curr_like)
         accepted = 0
 
         emit(progress_callback, started_at, 20.0, "sampler", "Initializing Random-Walk Metropolis state")
@@ -500,6 +537,8 @@ def run_phase_a_monte_carlo(
         "nan_detected": bool(np.isnan(traces["hamiltonian"]).any()),
         "suggested_actions": ["No critical issues detected"] if status == RunStatus.COMPLETED.value else ["Reduce mc_proposal_std"],
         "mc_acceptance_rate": acceptance_rate,
+        "initial_physics_energy": initial_physics_energy,
+        "initial_likelihood_energy": initial_likelihood_energy,
     }
 
     summary = {
@@ -602,6 +641,8 @@ def run_phase_a_monte_carlo(
         "x_obs": x_obs_np,
         "y_obs": y_obs_np,
         "traces": traces,
+        "samples": samples,
+        "chain": effective_chain,
         "output_paths": artifacts,
     }
 
@@ -658,9 +699,12 @@ def run_phase_a_bayesian_pinn(
         inv_var_d = 1.0 / float(config["noise_std"]) ** 2
         inv_var_r = 1.0 / (sigma_r**2)
 
-        def grad_and_metrics(theta):
+        def grad_and_metrics(theta, sub_key=None):
             nonlocal key
-            key, quad_key = jax.random.split(key)
+            if sub_key is None:
+                key, quad_key = jax.random.split(key)
+            else:
+                quad_key = sub_key
             x_quad = jax.random.uniform(
                 quad_key,
                 shape=(int(config["n_quad"]),),
@@ -690,12 +734,26 @@ def run_phase_a_bayesian_pinn(
 
             grad = jax.grad(_h)(theta)
             return grad, {
-                "likelihood": float(data_nll + residual_nll),
-                "physics": float(residual_nll),
-                "hamiltonian": float(h),
+                "likelihood": data_nll + residual_nll,
+                "physics": residual_nll,
+                "hamiltonian": h,
             }
 
         emit(progress_callback, started_at, 20.0, "sampler", "Initializing Bayesian sampler")
+
+        # Project the FD reference solution onto the sine basis.
+        x_fd, phi_fd = solve_poisson_dirichlet_fd(
+            forcing_fn=lambda z: np.asarray(forcing(jnp.asarray(z)), dtype=float),
+            n_points=500, domain=(0.0, 1.0), bc=(0.0, 0.0),
+        )
+        B_init = field.design_matrix(jnp.asarray(x_fd))
+        theta0 = jnp.asarray(
+            np.linalg.lstsq(np.asarray(B_init), np.asarray(phi_fd), rcond=None)[0]
+        )
+        _init_grad, _init_metrics = grad_and_metrics(theta0)
+        initial_physics_energy = float(_init_metrics["physics"])
+        initial_likelihood_energy = float(_init_metrics["likelihood"])
+
         emit(progress_callback, started_at, 22.0, "sampler", f"Running SGLD sampler ({int(config['n_steps'])} steps)")
 
         guard = RuntimeGuard(RuntimeGuardConfig(max_abs_hamiltonian=1e300, grad_ratio_limit=1e9))
@@ -707,13 +765,20 @@ def run_phase_a_bayesian_pinn(
         def _runtime_check(step: int, theta_np: np.ndarray, grad_np: np.ndarray, metrics: dict[str, float]):
             return guard.check(step, theta_np, grad_np, metrics)
 
-        theta0 = jnp.zeros((int(config["n_modes"]),), dtype=jnp.float64)
+        # B-PINN's residual_nll has curvature inv_var_r*(πk)^4 per mode.
+        # The preconditioner p_k=1/k^4 exactly cancels this, but only if
+        # we don't clip it.  Use the full raw condition number (20736 for
+        # 12 modes) so all modes see equal effective curvature.
+        _bpinn_max_cond = 25000.0
+        _bpinn_step = float(config["step_size0"]) * 0.5
+        precond = field.preconditioner(beta=float(config.get("beta", 0.5)))
+
         key, sgld_key = jax.random.split(key)
         chain, traces, sgld_meta = sgld_sample(
             theta0=theta0,
             grad_and_metrics_fn=grad_and_metrics,
             n_steps=int(config["n_steps"]),
-            step_size0=float(config["step_size0"]),
+            step_size0=_bpinn_step,
             decay=float(config["decay"]),
             key=sgld_key,
             progress_callback=_sgld_progress,
@@ -721,6 +786,8 @@ def run_phase_a_bayesian_pinn(
             stop_signal=stop_signal,
             runtime_check=_runtime_check,
             runtime_check_interval=int(config.get("runtime_check_interval", 5)),
+            preconditioner=precond,
+            max_condition_number=_bpinn_max_cond,
         )
 
         if sgld_meta.get("error_code") is not None:
@@ -775,6 +842,8 @@ def run_phase_a_bayesian_pinn(
     diagnostics = guard.diagnostics_payload()
     diagnostics["sgld_meta"] = sgld_meta
     diagnostics["bpinn_sigma_r"] = sigma_r
+    diagnostics["initial_physics_energy"] = initial_physics_energy
+    diagnostics["initial_likelihood_energy"] = initial_likelihood_energy
 
     l2_error = float(np.sqrt(np.mean((phi_mean - phi_truth) ** 2))) if np.isfinite(phi_mean).all() else float("nan")
     max_error = float(np.max(np.abs(phi_mean - phi_truth))) if np.isfinite(phi_mean).all() else float("nan")
@@ -880,6 +949,8 @@ def run_phase_a_bayesian_pinn(
         "x_obs": x_obs_np,
         "y_obs": y_obs_np,
         "traces": traces,
+        "samples": samples,
+        "chain": effective_chain,
         "output_paths": artifacts,
     }
 
@@ -947,7 +1018,20 @@ def run_phase_a_odil(
             phys_term = 0.5 * jnp.mean(residual**2)
             return data_term + phys_w * phys_term, (data_term, phys_term)
 
-        theta = jnp.zeros((int(config["n_modes"]),), dtype=jnp.float64)
+        # Initialize at the FD solution projected onto the sine basis.
+        x_fd, phi_fd = solve_poisson_dirichlet_fd(
+            forcing_fn=lambda z: np.asarray(forcing(jnp.asarray(z)), dtype=float),
+            n_points=500, domain=(0.0, 1.0), bc=(0.0, 0.0),
+        )
+        B_init = field.design_matrix(jnp.asarray(x_fd))
+        theta = jnp.asarray(
+            np.linalg.lstsq(np.asarray(B_init), np.asarray(phi_fd), rcond=None)[0]
+        )
+
+        _init_loss, (_init_data, _init_phys) = _loss(theta)
+        initial_physics_energy = float(_init_phys)
+        initial_likelihood_energy = float(_init_data)
+
         chain = np.zeros((steps, int(config["n_modes"])), dtype=float)
         ham_trace = np.zeros(steps, dtype=float)
         like_trace = np.zeros(steps, dtype=float)
@@ -1038,6 +1122,8 @@ def run_phase_a_odil(
         "max_abs_hamiltonian": float(np.max(np.abs(traces["hamiltonian"]))) if traces["hamiltonian"].size else 0.0,
         "nan_detected": bool(np.isnan(traces["hamiltonian"]).any()),
         "suggested_actions": ["No critical issues detected"] if status == RunStatus.COMPLETED.value else ["Reduce odil_lr"],
+        "initial_physics_energy": initial_physics_energy,
+        "initial_likelihood_energy": initial_likelihood_energy,
     }
 
     summary = {
