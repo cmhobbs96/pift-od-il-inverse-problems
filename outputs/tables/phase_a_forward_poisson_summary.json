@@ -13,52 +13,55 @@
       "step_size0": 0.002,
       "decay": 0.55,
       "n_quad": 96,
-      "n_grid": 300
+      "n_grid": 300,
+      "mc_proposal_std": 0.002,
+      "bpinn_sigma_r": 0.05,
+      "bpinn_prior_prec": 0.001,
+      "odil_steps": 8000,
+      "odil_lr": 0.002,
+      "odil_phys_weight": 12.0,
+      "runtime_check_interval": 5
     },
     "source_observations": "synthetic",
     "device_requested": "cpu",
     "device_used": "cpu",
-    "n_posterior_samples": 0,
-    "l2_error": NaN,
-    "max_error": NaN,
-    "reference_l2_error": NaN,
-    "reference_max_error": NaN,
+    "n_posterior_samples": 1500,
+    "l2_error": 0.00399614104436203,
+    "max_error": 0.006736149097068378,
+    "reference_l2_error": 0.004003440250847808,
+    "reference_max_error": 0.006742904049074183,
     "reference_solver_truth_l2": 1.1173496752256555e-05,
-    "hamiltonian_lag1_autocorr": 0.0,
-    "measurement_interval_coverage_90pct": NaN,
-    "status": "failed"
+    "hamiltonian_lag1_autocorr": 0.8684284302073314,
+    "measurement_interval_coverage_90pct": 1.0,
+    "status": "completed"
   },
   "metrics": {
-    "runtime_sec": 1.1142438750102883,
+    "runtime_sec": 70.89143887499813,
     "n_total_steps": 16000,
-    "n_effective_steps": 8,
+    "n_effective_steps": 16000,
     "reference_solver_truth_l2": 1.1173496752256555e-05
   },
   "diagnostics": {
     "stability_flags": {
       "nan_detected": false,
       "inf_detected": false,
-      "divergence_detected": true,
+      "divergence_detected": false,
       "hamiltonian_overflow": false
     },
-    "first_bad_step": 8,
-    "max_abs_hamiltonian": 5.279859948114179e+57,
+    "first_bad_step": null,
+    "max_abs_hamiltonian": 46781567.78153017,
     "nan_detected": false,
     "suggested_actions": [
-      "Reduce step_size0 and consider higher decay",
-      "Increase noise_std floor for noisy observations"
+      "No critical issues detected"
     ],
     "sgld_meta": {
-      "stopped": true,
-      "stop_step": 8,
-      "error_code": "gradient_divergence",
-      "error_detail": "Gradient norm diverged: 3.640e+32 vs baseline 4.922e+16"
+      "stopped": false,
+      "stop_step": null,
+      "error_code": null,
+      "error_detail": null
     }
   },
-  "error": {
-    "code": "gradient_divergence",
-    "message": "Gradient norm diverged: 3.640e+32 vs baseline 4.922e+16"
-  },
+  "error": null,
   "artifacts": {
     "field_plot": "/Users/chobbs/Desktop/Personal Projects/pift-od-il-inverse-problems/outputs/figures/phase_a_forward_poisson_field.png",
     "trace_plot": "/Users/chobbs/Desktop/Personal Projects/pift-od-il-inverse-problems/outputs/figures/phase_a_forward_poisson_trace.png",
