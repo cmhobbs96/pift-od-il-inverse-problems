@@ -8,6 +8,7 @@ estimates drive an outer SGLD loop on λ.
 from __future__ import annotations
 
 import dataclasses
+import time
 from collections.abc import Callable
 
 import jax
@@ -159,7 +160,9 @@ def nested_sgld(
     # ------------------------------------------------------------------
     # Warm-up: equilibrate fields with λ fixed
     # ------------------------------------------------------------------
-    print(f"[nested_sgld] Warming up: {warmup_steps} steps (λ fixed)")
+    print(f"[nested_sgld] Warming up: {warmup_steps} steps (λ fixed)", flush=True)
+    _warmup_print_every = max(1, warmup_steps // 20)
+    _warmup_started = time.monotonic()
     for w in range(warmup_steps):
         if stop_signal is not None and stop_signal():
             meta["stopped"] = True
@@ -191,6 +194,17 @@ def nested_sgld(
 
         if progress_callback and (w + 1) % progress_interval == 0:
             progress_callback(w + 1, total_steps)
+
+        if (w + 1) % _warmup_print_every == 0 or (w + 1) == warmup_steps:
+            elapsed = time.monotonic() - _warmup_started
+            rate = (w + 1) / max(elapsed, 1e-9)
+            eta = (warmup_steps - (w + 1)) / max(rate, 1e-9)
+            print(
+                f"[nested_sgld]   warmup {w+1}/{warmup_steps}  "
+                f"({100*(w+1)/warmup_steps:5.1f}%)  "
+                f"{rate:.1f} steps/s  ETA {eta:6.1f}s",
+                flush=True,
+            )
 
     print("[nested_sgld] Warm-up complete, starting outer loop")
 
