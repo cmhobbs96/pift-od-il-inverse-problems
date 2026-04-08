@@ -258,6 +258,9 @@ def nested_sgld(
     # ------------------------------------------------------------------
     # Outer loop
     # ------------------------------------------------------------------
+    print(f"[nested_sgld] Outer loop: {outer_steps} steps", flush=True)
+    _outer_print_every = max(1, outer_steps // 20)
+    _outer_started = time.monotonic()
     for t in range(outer_steps):
         if stop_signal is not None and stop_signal():
             meta["stopped"] = True
@@ -327,6 +330,19 @@ def nested_sgld(
 
         if progress_callback and (t + 1) % progress_interval == 0:
             progress_callback(warmup_steps + t + 1, total_steps)
+
+        if (t + 1) % _outer_print_every == 0 or (t + 1) == outer_steps:
+            elapsed = time.monotonic() - _outer_started
+            rate = (t + 1) / max(elapsed, 1e-9)
+            eta = (outer_steps - (t + 1)) / max(rate, 1e-9)
+            lam_str = ", ".join(f"{float(v):+.3f}" for v in np.asarray(lam))
+            print(
+                f"[nested_sgld]   outer {t+1}/{outer_steps}  "
+                f"({100*(t+1)/outer_steps:5.1f}%)  "
+                f"{rate:.1f} steps/s  ETA {eta:6.1f}s  "
+                f"λ=[{lam_str}]",
+                flush=True,
+            )
 
     return NestedSGLDResult(
         lambda_chain=lambda_chain,
