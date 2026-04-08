@@ -101,8 +101,8 @@ def _build_grad_fns(field, kle, beta, n_quad, x_obs, y_obs, noise_std):
 
         energy_val = _physics_energy(phi, lam, x_quad)
         grad_phi, grad_lam = jax.grad(_physics_energy, argnums=(0, 1))(phi, lam, x_quad)
-        phys_e = float(energy_val)
-        return grad_phi, grad_lam, {"hamiltonian": phys_e, "physics": phys_e, "likelihood": 0.0}
+        # Keep traced (no float cast) so this works inside lax.scan / jit.
+        return grad_phi, grad_lam, {"hamiltonian": energy_val, "physics": energy_val, "likelihood": jnp.zeros(())}
 
     def posterior_grad_fn(phi, lam, key):
         key, qk = jax.random.split(key)
@@ -115,12 +115,10 @@ def _build_grad_fns(field, kle, beta, n_quad, x_obs, y_obs, noise_std):
         grad_phi_data = jax.grad(_data_nll)(phi)
 
         total_grad_phi = grad_phi_phys + grad_phi_data
-        phys_e = float(phys_energy_val)
-        nll_e = float(nll_val)
         return (
             total_grad_phi,
             grad_lam,
-            {"hamiltonian": phys_e + nll_e, "physics": phys_e, "likelihood": nll_e},
+            {"hamiltonian": phys_energy_val + nll_val, "physics": phys_energy_val, "likelihood": nll_val},
         )
 
     return prior_grad_fn, posterior_grad_fn

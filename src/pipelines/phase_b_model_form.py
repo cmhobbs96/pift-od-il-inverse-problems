@@ -126,7 +126,8 @@ def _build_grad_fns(
             return 0.5 * inv_var * jnp.sum((pred - y_obs) ** 2)
 
         nll_val, nll_grad = jax.value_and_grad(_nll)(phi_arr)
-        return float(nll_val), nll_grad
+        # Keep traced (no float cast) so this works inside lax.scan / jit.
+        return nll_val, nll_grad
 
     def prior_grad_fn(phi, lam, key):
         beta = jnp.exp(lam[0])
@@ -138,7 +139,7 @@ def _build_grad_fns(
         grad_phi = beta * g_phys
         # d/d(log beta) [beta * U] = beta * U
         grad_lam = jnp.array([beta * e_phys])
-        ham = float(beta * e_phys)
+        ham = beta * e_phys
 
         return grad_phi, grad_lam, {"hamiltonian": ham, "physics": e_phys}
 
@@ -153,7 +154,7 @@ def _build_grad_fns(
         grad_phi = beta * g_phys + g_like
         # Likelihood doesn't depend on beta, so grad_lam same as prior
         grad_lam = jnp.array([beta * e_phys])
-        ham = float(beta * e_phys + e_like)
+        ham = beta * e_phys + e_like
 
         return grad_phi, grad_lam, {
             "hamiltonian": ham,
