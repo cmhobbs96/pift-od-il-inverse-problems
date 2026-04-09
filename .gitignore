@@ -213,6 +213,7 @@ __marimo__/
 outputs/runs/
 outputs/compare/
 outputs/exports/
+outputs/bench_*/
 outputs/runs/run_registry.sqlite-shm
 outputs/runs/run_registry.sqlite-wal
 
