@@ -32,7 +32,7 @@ py-modules = ["run_types", "run_manager", "storage"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["core*", "pipelines*", "utils*", "models*", "backends*"]
+include = ["core*", "pipelines*", "utils*", "models*", "backends*", "benchmarks*"]
 exclude = ["*.tests", "*.tests.*", "tests.*", "tests"]
 
 [tool.pytest.ini_options]

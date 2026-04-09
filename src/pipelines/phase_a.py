@@ -16,6 +16,7 @@ from utils.diagnostics import credible_interval, lag1_autocorr
 from utils.diagnostics_runtime import RuntimeGuard, RuntimeGuardConfig
 from core.energies import poisson_residual_energy
 from core.likelihoods import gaussian_nll
+from core.odil import odil_solve_poisson_1d
 from core.parameterizations import SineBasisField
 from utils.plotting import plot_diagnostics, plot_field_summary
 from core.reference_solver import solve_poisson_dirichlet_fd
@@ -61,8 +62,23 @@ def run_phase_a_forward_poisson(
     stop_signal: Callable[[], bool] | None = None,
     progress_callback: Callable[[float, str, str, float], None] | None = None,
     save_outputs: bool = True,
+    init_mode: str = "fd",
 ) -> dict[str, object]:
-    """Run Phase A forward PIFT on the 1D Poisson example."""
+    """Run Phase A forward PIFT on the 1D Poisson example.
+
+    Parameters
+    ----------
+    init_mode : {"cold", "fd", "odil"}
+        How to initialize the SGLD chain:
+          * ``"cold"`` — start at zero theta.
+          * ``"fd"`` — project the FD reference solution onto the sine basis
+            (existing default; matches all paper-replication experiments).
+          * ``"odil"`` — run ODIL Gauss-Newton on the same problem (incl. the
+            observation data term) and project the resulting MAP grid solution
+            onto the sine basis.  This is the **Module 2.7 warm start**: the
+            ODIL runtime is recorded separately in
+            ``metrics["odil_warmstart_sec"]`` so the benchmark can attribute it.
+    """
     started_at = time.monotonic()
     config = dict(DEFAULT_PHASE_A_CONFIG)
     if cfg:
@@ -122,18 +138,42 @@ def run_phase_a_forward_poisson(
             }
             return grad, metrics
 
-        emit(progress_callback, started_at, 20.0, "sampler", "Initializing SGLD state")
+        emit(progress_callback, started_at, 20.0, "sampler", f"Initializing SGLD state (init_mode={init_mode})")
 
-        # Project the FD reference solution onto the sine basis so the chain
-        # starts near the physics solution rather than at zero.
-        x_fd, phi_fd = solve_poisson_dirichlet_fd(
-            forcing_fn=lambda z: np.asarray(forcing(jnp.asarray(z)), dtype=float),
-            n_points=500, domain=(0.0, 1.0), bc=(0.0, 0.0),
-        )
-        B_init = field.design_matrix(jnp.asarray(x_fd))
-        theta0 = jnp.asarray(
-            np.linalg.lstsq(np.asarray(B_init), np.asarray(phi_fd), rcond=None)[0]
-        )
+        odil_warmstart_sec = 0.0
+        if init_mode == "cold":
+            theta0 = jnp.zeros(int(config["n_modes"]), dtype=jnp.float64)
+        elif init_mode == "odil":
+            # Module 2.7: warm-start from the ODIL MAP solution.  We pass the
+            # observation data so ODIL solves the data-tilted MAP, not the
+            # pure forward PDE.
+            warm = odil_solve_poisson_1d(
+                forcing_fn=forcing,
+                n_grid=max(129, int(config.get("n_grid", 129))),
+                domain=(0.0, 1.0),
+                bc=(0.0, 0.0),
+                obs=(np.asarray(x_obs), np.asarray(y_obs)),
+                noise_std=float(config["noise_std"]),
+                method="gauss_newton",
+                max_iter=50,
+                tol=1e-10,
+            )
+            odil_warmstart_sec = float(warm.runtime_sec)
+            B_init = np.asarray(field.design_matrix(jnp.asarray(warm.x_grid)))
+            theta0 = jnp.asarray(
+                np.linalg.lstsq(B_init, warm.u_grid, rcond=None)[0]
+            )
+        else:
+            # "fd" — existing default: project the FD reference solution onto
+            # the sine basis so the chain starts near the physics solution.
+            x_fd, phi_fd = solve_poisson_dirichlet_fd(
+                forcing_fn=lambda z: np.asarray(forcing(jnp.asarray(z)), dtype=float),
+                n_points=500, domain=(0.0, 1.0), bc=(0.0, 0.0),
+            )
+            B_init = field.design_matrix(jnp.asarray(x_fd))
+            theta0 = jnp.asarray(
+                np.linalg.lstsq(np.asarray(B_init), np.asarray(phi_fd), rcond=None)[0]
+            )
         _init_grad, _init_metrics = grad_and_metrics(theta0)
         initial_physics_energy = float(_init_metrics["physics"])
         initial_likelihood_energy = float(_init_metrics["likelihood"])
@@ -304,6 +344,8 @@ def run_phase_a_forward_poisson(
                 "n_total_steps": int(config["n_steps"]),
                 "n_effective_steps": int(effective_chain.shape[0]),
                 "reference_solver_truth_l2": reference_solver_truth_l2,
+                "init_mode": init_mode,
+                "odil_warmstart_sec": float(odil_warmstart_sec),
             },
             "diagnostics": diagnostics,
             "error": error,
@@ -328,6 +370,8 @@ def run_phase_a_forward_poisson(
             "n_total_steps": int(config["n_steps"]),
             "n_effective_steps": int(effective_chain.shape[0]),
             "reference_solver_truth_l2": reference_solver_truth_l2,
+            "init_mode": init_mode,
+            "odil_warmstart_sec": float(odil_warmstart_sec),
         },
         "diagnostics": diagnostics,
         "artifacts": artifacts,
@@ -913,6 +957,8 @@ def run_phase_a_bayesian_pinn(
                 "n_total_steps": int(config["n_steps"]),
                 "n_effective_steps": int(effective_chain.shape[0]),
                 "reference_solver_truth_l2": reference_solver_truth_l2,
+                "init_mode": init_mode,
+                "odil_warmstart_sec": float(odil_warmstart_sec),
             },
             "diagnostics": diagnostics,
             "error": error,
@@ -972,9 +1018,14 @@ def run_phase_a_odil(
     if cfg:
         config.update(cfg)
 
-    steps = int(config.get("odil_steps", config["n_steps"]))
-    lr = float(config.get("odil_lr", 2e-3))
-    phys_w = float(config.get("odil_phys_weight", config["beta"]))
+    # NB: ``odil_steps``/``odil_lr``/``odil_phys_weight`` are kept in the config
+    # for backward compatibility with saved presets, but the proper Karnakov-style
+    # ODIL solver in ``core.odil`` does not need them.  ``odil_steps`` is reused
+    # as the iteration cap for Gauss-Newton.
+    odil_max_iter = int(config.get("odil_max_iter", min(50, int(config.get("odil_steps", 50)))))
+    odil_method = str(config.get("odil_method", "gauss_newton"))
+    odil_n_grid = int(config.get("odil_n_grid", max(129, int(config.get("n_grid", 129)))))
+    odil_bc_weight = float(config.get("odil_bc_weight", 1.0e6))
 
     emit(progress_callback, started_at, 2.0, "setup", "Initializing ODIL configuration")
     emit(progress_callback, started_at, 4.0, "setup", "Validating hyperparameters")
@@ -1004,85 +1055,95 @@ def run_phase_a_odil(
         emit(progress_callback, started_at, 16.0, "data", "Constructed observation operator matrix")
         emit(progress_callback, started_at, 18.0, "model", "Building ODIL discrete loss")
 
-        x_quad = jnp.linspace(0.0, 1.0, max(128, int(config["n_quad"]) * 4))
-        op_quad = field.neg_second_derivative_matrix(x_quad)
-        forcing_quad = forcing(x_quad)
-        inv_var_d = 1.0 / float(config["noise_std"]) ** 2
-
-        def _loss(theta):
-            pred = obs_matrix @ theta
-            err = pred - y_obs
-            data_term = 0.5 * inv_var_d * jnp.sum(err**2)
-
-            residual = op_quad @ theta - forcing_quad
-            phys_term = 0.5 * jnp.mean(residual**2)
-            return data_term + phys_w * phys_term, (data_term, phys_term)
-
-        # Initialize at the FD solution projected onto the sine basis.
-        x_fd, phi_fd = solve_poisson_dirichlet_fd(
-            forcing_fn=lambda z: np.asarray(forcing(jnp.asarray(z)), dtype=float),
-            n_points=500, domain=(0.0, 1.0), bc=(0.0, 0.0),
-        )
-        B_init = field.design_matrix(jnp.asarray(x_fd))
-        theta = jnp.asarray(
-            np.linalg.lstsq(np.asarray(B_init), np.asarray(phi_fd), rcond=None)[0]
-        )
-
-        _init_loss, (_init_data, _init_phys) = _loss(theta)
-        initial_physics_energy = float(_init_phys)
-        initial_likelihood_energy = float(_init_data)
-
-        chain = np.zeros((steps, int(config["n_modes"])), dtype=float)
-        ham_trace = np.zeros(steps, dtype=float)
-        like_trace = np.zeros(steps, dtype=float)
-        phys_trace = np.zeros(steps, dtype=float)
-
         status = RunStatus.COMPLETED.value
         error = None
         stop_step: int | None = None
 
-        emit(progress_callback, started_at, 20.0, "sampler", "Initializing ODIL optimizer")
-        emit(progress_callback, started_at, 22.0, "sampler", f"Running ODIL optimization ({steps} steps)")
+        emit(progress_callback, started_at, 20.0, "sampler", "Initializing ODIL Gauss-Newton solver")
+        emit(
+            progress_callback,
+            started_at,
+            22.0,
+            "sampler",
+            f"Running ODIL ({odil_method}, max_iter={odil_max_iter}, n_grid={odil_n_grid})",
+        )
 
-        for t in range(steps):
-            if stop_signal is not None and stop_signal():
-                status = RunStatus.STOPPED.value
-                error = {"code": "stopped", "message": "Run stopped by user request"}
-                stop_step = t
-                break
+        # Solve the discrete FD residual loss with optional Gaussian data term.
+        odil_result = odil_solve_poisson_1d(
+            forcing_fn=forcing,
+            n_grid=odil_n_grid,
+            domain=(0.0, 1.0),
+            bc=(0.0, 0.0),
+            obs=(np.asarray(x_obs), np.asarray(y_obs)),
+            noise_std=float(config["noise_std"]),
+            method=odil_method,
+            max_iter=odil_max_iter,
+            tol=1e-10,
+            bc_weight=odil_bc_weight,
+        )
 
-            (loss_val, (data_val, phys_val)), grad = jax.value_and_grad(_loss, has_aux=True)(theta)
-            if not jnp.isfinite(loss_val) or not jnp.all(jnp.isfinite(grad)):
-                status = RunStatus.FAILED.value
-                error = {"code": "non_finite", "message": "Non-finite ODIL objective/gradient"}
-                stop_step = t + 1
-                break
+        if not np.all(np.isfinite(odil_result.u_grid)):
+            status = RunStatus.FAILED.value
+            error = {"code": "non_finite", "message": "Non-finite ODIL solution"}
+            stop_step = odil_result.n_iterations
 
-            theta = theta - lr * grad
+        emit(
+            progress_callback,
+            started_at,
+            70.0,
+            "sampler",
+            f"ODIL converged in {odil_result.n_iterations} iterations",
+        )
 
-            chain[t] = np.asarray(theta)
-            ham_trace[t] = float(loss_val)
-            like_trace[t] = float(data_val)
-            phys_trace[t] = float(phys_val)
+        # Project the grid solution onto the sine basis so the rest of the
+        # pipeline (chain, plots, predictives) keeps the same shape as PIFT/MC.
+        basis_at_solver_grid = np.asarray(field.design_matrix(jnp.asarray(odil_result.x_grid)))
+        theta_hat_np, *_ = np.linalg.lstsq(basis_at_solver_grid, odil_result.u_grid, rcond=None)
+        theta_hat = theta_hat_np.astype(float)
 
-            interval = max(1, steps // 80)
-            if t % interval == 0 or (t + 1) == steps:
-                frac = (t + 1) / steps
-                emit(progress_callback, started_at, 22.0 + 58.0 * frac, "sampler", f"ODIL step {t+1}/{steps}")
+        # Build a "chain" of length n_iter+1 by tiling the final theta.  This
+        # preserves the (steps, n_modes) shape that the GUI/diagnostics expect
+        # without pretending we have intermediate basis-coefficient samples.
+        n_iter_total = int(odil_result.n_iterations) + 1
+        chain = np.tile(theta_hat[None, :], (n_iter_total, 1))
 
-        effective_steps = stop_step if stop_step is not None else steps
-        effective_chain = chain[:effective_steps]
+        # Loss history goes into the hamiltonian trace; likelihood/physics are
+        # not separately tracked by the solver, so we record zeros except for
+        # the final step which holds the corresponding decomposed energies.
+        ham_trace = odil_result.loss_history.astype(float)
+        if ham_trace.size != n_iter_total:
+            # Pad/truncate to match chain length so downstream slicing is safe.
+            if ham_trace.size < n_iter_total:
+                ham_trace = np.concatenate(
+                    [ham_trace, np.full(n_iter_total - ham_trace.size, ham_trace[-1])]
+                )
+            else:
+                ham_trace = ham_trace[:n_iter_total]
+
+        # Compute final-iteration likelihood / physics components for diagnostics.
+        theta_hat_j = jnp.asarray(theta_hat)
+        x_quad = jnp.linspace(0.0, 1.0, max(128, int(config["n_quad"]) * 4))
+        phys_energy_final, _, _ = poisson_residual_energy(theta_hat_j, x_quad, field, forcing)
+        like_energy_final, _, _ = gaussian_nll(theta_hat_j, obs_matrix, y_obs, float(config["noise_std"]))
+        like_trace = np.zeros(n_iter_total, dtype=float)
+        phys_trace = np.zeros(n_iter_total, dtype=float)
+        like_trace[-1] = float(like_energy_final)
+        phys_trace[-1] = float(phys_energy_final)
+        initial_physics_energy = float(phys_energy_final)
+        initial_likelihood_energy = float(like_energy_final)
+
+        effective_steps = n_iter_total
+        effective_chain = chain
         traces = {
-            "hamiltonian": ham_trace[:effective_steps],
-            "likelihood": like_trace[:effective_steps],
-            "physics": phys_trace[:effective_steps],
+            "hamiltonian": ham_trace,
+            "likelihood": like_trace,
+            "physics": phys_trace,
         }
 
         emit(progress_callback, started_at, 84.0, "post", "Post-processing deterministic solution")
 
         x_grid = np.linspace(0.0, 1.0, int(config["n_grid"]))
         basis_grid = np.asarray(field.design_matrix(jnp.asarray(x_grid)))
-        theta_hat = effective_chain[-1] if effective_chain.shape[0] > 0 else np.zeros(int(config["n_modes"]), dtype=float)
         phi_mean = theta_hat @ basis_grid.T
         phi_std = np.zeros_like(phi_mean)
         phi_truth = np.asarray(phi_true(jnp.asarray(x_grid)))
@@ -1182,9 +1243,13 @@ def run_phase_a_odil(
             "summary": summary,
             "metrics": {
                 "runtime_sec": runtime_sec,
-                "n_total_steps": int(steps),
+                "n_total_steps": int(n_iter_total),
                 "n_effective_steps": int(effective_steps),
                 "reference_solver_truth_l2": reference_solver_truth_l2,
+                "odil_iterations": int(odil_result.n_iterations),
+                "odil_converged": bool(odil_result.converged),
+                "odil_method": str(odil_result.method_used),
+                "odil_runtime_sec": float(odil_result.runtime_sec),
             },
             "diagnostics": diagnostics,
             "error": error,
@@ -1205,9 +1270,13 @@ def run_phase_a_odil(
         "summary": summary,
         "metrics": {
             "runtime_sec": runtime_sec,
-            "n_total_steps": int(steps),
+            "n_total_steps": int(n_iter_total),
             "n_effective_steps": int(effective_steps),
             "reference_solver_truth_l2": reference_solver_truth_l2,
+            "odil_iterations": int(odil_result.n_iterations),
+            "odil_converged": bool(odil_result.converged),
+            "odil_method": str(odil_result.method_used),
+            "odil_runtime_sec": float(odil_result.runtime_sec),
         },
         "diagnostics": diagnostics,
         "artifacts": artifacts,

@@ -125,3 +125,101 @@ class FourierBasis2D:
     def grad_y(self, xy, theta):
         """Evaluate d(phi)/dy."""
         return self.design_matrix_dy(xy) @ jnp.asarray(theta, dtype=jnp.float64)
+
+    # ------------------------------------------------------------------
+    # Laplacian
+    # ------------------------------------------------------------------
+
+    def _ddbasis_1d(self, u):
+        """Second derivatives of the 1D basis functions w.r.t. ``u``."""
+        u = jnp.asarray(u, dtype=jnp.float64)
+        cols = [jnp.zeros_like(u)]  # d²/du² [1] = 0
+        for j in range(1, self.max_freq + 1):
+            w = jnp.pi * j
+            cols.append(-(w**2) * jnp.cos(w * u))
+            cols.append(-(w**2) * jnp.sin(w * u))
+        return jnp.stack(cols, axis=-1)
+
+    def design_matrix_laplacian(self, xy):
+        """Laplacian Δ(psi_k) = ∂²/∂x² + ∂²/∂y² on each 2D basis function.
+
+        Returns shape ``(N, n_params)``.
+        """
+        xy = jnp.asarray(xy, dtype=jnp.float64)
+        bx = self._basis_1d(xy[:, 0])
+        by = self._basis_1d(xy[:, 1])
+        ddbx = self._ddbasis_1d(xy[:, 0])
+        ddby = self._ddbasis_1d(xy[:, 1])
+        # Δ(f(x) g(y)) = f''(x) g(y) + f(x) g''(y)
+        term1 = ddbx[:, :, None] * by[:, None, :]
+        term2 = bx[:, :, None] * ddby[:, None, :]
+        return (term1 + term2).reshape(xy.shape[0], -1)
+
+    def laplacian(self, xy, theta):
+        """Evaluate Δphi(x, y; theta)."""
+        return self.design_matrix_laplacian(xy) @ jnp.asarray(theta, dtype=jnp.float64)
+
+
+class SineBasis2D:
+    """2D sine basis on ``[0, 1]^2`` with zero Dirichlet boundaries.
+
+    Tensor product of 1D sine bases ``{sin(pi*j*x) : j = 1, ..., n_modes}``
+    in each dimension, giving ``n_modes ** 2`` total parameters.  Every basis
+    function vanishes on the boundary, so any linear combination automatically
+    satisfies ``phi = 0`` on ``∂[0, 1]^2``.
+
+    The Laplacian is diagonal in this basis with eigenvalues
+    ``-(pi*jx)^2 - (pi*jy)^2``, which makes the 2D Poisson problem
+    ``-Δphi = f`` separable.
+    """
+
+    def __init__(self, n_modes: int = 8) -> None:
+        if n_modes < 1:
+            raise ValueError("n_modes must be >= 1")
+        self.n_modes = int(n_modes)
+        self._k = jnp.arange(1, self.n_modes + 1, dtype=jnp.float64)
+        # Diagonal Laplacian eigenvalues (negative): lam_{i,j} = -(pi*i)^2 - (pi*j)^2
+        kx = (jnp.pi * self._k) ** 2
+        # (n_modes, n_modes), entry (i, j) → kx[i] + kx[j]
+        self._neg_lap_eigs = (kx[:, None] + kx[None, :]).reshape(-1)
+
+    @property
+    def n_params(self) -> int:
+        return int(self.n_modes * self.n_modes)
+
+    # ------------------------------------------------------------------
+    # Design matrices
+    # ------------------------------------------------------------------
+
+    def _sin_1d(self, u):
+        u = jnp.asarray(u, dtype=jnp.float64)
+        return jnp.sin(jnp.pi * u[:, None] * self._k[None, :])  # (N, n_modes)
+
+    def design_matrix(self, xy):
+        """Evaluate basis functions at points ``xy`` of shape ``(N, 2)``."""
+        xy = jnp.asarray(xy, dtype=jnp.float64)
+        bx = self._sin_1d(xy[:, 0])
+        by = self._sin_1d(xy[:, 1])
+        return (bx[:, :, None] * by[:, None, :]).reshape(xy.shape[0], -1)
+
+    def design_matrix_neg_laplacian(self, xy):
+        """Design matrix for ``-Δphi``: each column is the eigenvalue-scaled basis."""
+        return self.design_matrix(xy) * self._neg_lap_eigs[None, :]
+
+    def eval(self, xy, theta):
+        return self.design_matrix(xy) @ jnp.asarray(theta, dtype=jnp.float64)
+
+    def neg_laplacian(self, xy, theta):
+        """Evaluate ``-Δphi(xy; theta)``."""
+        return self.design_matrix_neg_laplacian(xy) @ jnp.asarray(theta, dtype=jnp.float64)
+
+    def preconditioner(self) -> jnp.ndarray:
+        """Diagonal preconditioner that normalizes the Hessian curvature.
+
+        Mirrors :meth:`SineBasisField.preconditioner` for the 2D case: the
+        physics Hessian is diagonal with eigenvalues
+        ``0.5 * (-Δ)^2`` so the preconditioner is the inverse, normalized to
+        the lowest mode.
+        """
+        lam = 0.5 * self._neg_lap_eigs ** 2
+        return lam[0] / lam
